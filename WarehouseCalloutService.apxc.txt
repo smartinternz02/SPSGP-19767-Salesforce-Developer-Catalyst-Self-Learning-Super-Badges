@@ -1,49 +1,46 @@
-public with sharing class WarehouseCalloutService implements Queueable {
+public with sharing class WarehouseCalloutService {
+
     private static final String WAREHOUSE_URL = 'https://th-superbadge-apex.herokuapp.com/equipment';
-    
-    //class that makes a REST callout to an external warehouse system to get a list of equipment that needs to be updated.
-    //The callout’s JSON response returns the equipment records that you upsert in Salesforce. 
-    
+
     @future(callout=true)
+    // complete this method to make the callout (using @future) to the
+    // REST endpoint and update equipment on hand.
     public static void runWarehouseEquipmentSync(){
         Http http = new Http();
         HttpRequest request = new HttpRequest();
-        
         request.setEndpoint(WAREHOUSE_URL);
         request.setMethod('GET');
         HttpResponse response = http.send(request);
-        
-        List<Product2> warehouseEq = new List<Product2>();
-        
-        if (response.getStatusCode() == 200){
-            List<Object> jsonResponse = (List<Object>)JSON.deserializeUntyped(response.getBody());
-            System.debug(response.getBody());
-            
-            //class maps the following fields: replacement part (always true), cost, current inventory, lifespan, maintenance cycle, and warehouse SKU
-            //warehouse SKU will be external ID for identifying which equipment records to update within Salesforce
-            for (Object eq : jsonResponse){
-                Map<String,Object> mapJson = (Map<String,Object>)eq;
-                Product2 myEq = new Product2();
-                myEq.Replacement_Part__c = (Boolean) mapJson.get('replacement');
-                myEq.Name = (String) mapJson.get('name');
-                myEq.Maintenance_Cycle__c = (Integer) mapJson.get('maintenanceperiod');
-                myEq.Lifespan_Months__c = (Integer) mapJson.get('lifespan');
-                myEq.Cost__c = (Integer) mapJson.get('cost');
-                myEq.Warehouse_SKU__c = (String) mapJson.get('sku');
-                myEq.Current_Inventory__c = (Double) mapJson.get('quantity');
-                myEq.ProductCode = (String) mapJson.get('_id');
-                warehouseEq.add(myEq);
+        // If the request is successful, parse the JSON response.
+        String ret = '';
+        if (response.getStatusCode() == 200) {
+            // Deserialize the JSON string into collections of primitive data types.
+            List<Object> results = (List<Object>) JSON.deserializeUntyped(response.getBody());
+
+            List<Product2> LstProduct = new List<Product2>();
+            for(Object obj : results)
+            { 
+                Map<String, Object> mapobj = (Map<String, Object>)obj;
+                Product2 product = new Product2();
+
+                Integer maintenanceperiod = (Integer)mapobj.get('maintenanceperiod');               
+                Integer Lifespan = (Integer)mapobj.get('lifespan');
+                Integer Cost = (Integer)mapobj.get('cost');
+                Boolean replacement = (Boolean)mapobj.get('replacement');
+                Integer quantity = ((Integer)mapobj.get('qIntegerntity'));
+                product.Name  = (String)mapobj.get('name'); 
+                product.Maintenance_Cycle__c = Integer.valueof(maintenanceperiod);
+                product.Cost__c = Cost;
+                product.Current_Inventory__c = quantity;
+                product.Lifespan_Months__c = Lifespan; 
+                product.Replacement_Part__c = replacement;
+                product.Warehouse_SKU__c = (String) mapobj.get('sku');
+                product.ProductCode = (String)mapobj.get('_id');       
+                LstProduct.add(product);
             }
-            
-            if (warehouseEq.size() > 0){
-                upsert warehouseEq;
-                System.debug('Your equipment was synced with the warehouse one');
-            }
+            System.debug(LstProduct);
+            upsert LstProduct;
+
         }
     }
-    
-    public static void execute (QueueableContext context){
-        runWarehouseEquipmentSync();
-    }
-    
 }
